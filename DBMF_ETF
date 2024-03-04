@@ -1,0 +1,28 @@
+import pandas as pd
+
+url = "https://imgpfunds.com/wp-content/uploads/pdfs/holdings/DBMF-Holdings.xlsx"
+df = pd.read_excel(url, header=5)
+df["WEIGHTS"] = round(df["PCT_HOLDINGS"] * 100, 0)
+df2 = df[["DESCRIPTION","WEIGHTS"]]
+df2.index = df["TICKER"]
+df2["short_name"] = df2["DESCRIPTION"].str[:18]
+df_sns = df2.sort_values(by="WEIGHTS")
+
+sns.barplot(
+    x='short_name',
+    y='WEIGHTS',
+    data=df_sns,
+    color='blue'
+)
+
+#Rotate the entire chart 90 degrees
+# plt.gca().set_aspect('equal')
+plt.xticks(rotation=90)
+
+# Increase the size of the figure
+plt.figure(figsize=(40, 20))
+
+# Show the plot
+plt.show()
+
+print(df_sns)
