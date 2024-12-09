@@ -1,0 +1,56 @@
+import pandas as pd
+import ta
+import matplotlib.pyplot as plt
+import yfinance as yf
+import ta
+
+ticker = "USDCAD=X"
+years = 2
+periodfordata = years * 200
+
+data = yf.download(ticker, period=f"{periodfordata}d")
+df = pd.DataFrame(data).reset_index()
+
+print(df)
+
+# Calculate Stochastic Oscillator
+df['%K'] = ta.momentum.StochasticOscillator(
+    high=df['High'],
+    low=df['Low'],
+    close=df['Close'],
+    window=14,  # Look-back period
+    smooth_window=3  # Smoothing for %D
+).stoch()
+
+df['%D'] = ta.momentum.StochasticOscillator(
+    high=df['High'],
+    low=df['Low'],
+    close=df['Close'],
+    window=14,
+    smooth_window=3
+).stoch_signal()
+
+# Plot Price Chart and Stochastic Oscillator
+plt.figure(figsize=(12, 8))
+
+# Price chart
+plt.subplot(2, 1, 1)
+plt.plot(df['Date'], df['Close'], label='Close Price')
+plt.title("Price Chart")
+plt.xlabel("Date")
+plt.ylabel("Price")
+plt.legend()
+
+# Stochastic Oscillator
+plt.subplot(2, 1, 2)
+plt.plot(df['Date'], df['%K'], label='%K', color='blue')
+plt.plot(df['Date'], df['%D'], label='%D', color='orange')
+plt.axhline(80, color='red', linestyle='--', label='Overbought')
+plt.axhline(20, color='green', linestyle='--', label='Oversold')
+plt.title("Stochastic Oscillator")
+plt.xlabel("Date")
+plt.ylabel("Oscillator Value")
+plt.legend()
+
+plt.tight_layout()
+plt.show()
