@@ -1,0 +1,105 @@
+import pandas as pd
+import numpy as np
+import yfinance as yf
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+
+
+
+# Define the ticker symbol for USD/CAD
+ticker = "USDJPY=X"
+
+lists = ["AUDUSD","USDCAD","EURUSD","USDJPY","GBPUSD",
+         "USDMXN","USDBRL","USDCLP","USDCOP",
+         "EURPLN","EURHUF","EURCZK","USDZAR","USDTRY",
+         "USDSGD"]
+
+years = 10
+
+periodfordata = 200 * years
+
+lookback = 55
+
+pdf_path = "Turtle_Trading_Analysis.pdf"
+with PdfPages(pdf_path) as pdf:
+
+    for item in lists:
+        ticker = f"{item}=X"
+        # Fetch the data for the last 200 trading days
+        data = yf.download(ticker, period=f"{periodfordata}d")
+
+        # Calculate the 20-day moving average
+        data['MA'] = data['Close'].rolling(window=lookback).mean()
+
+        # Calculate the rolling highest high for the given lookback period
+        data['RollingHigh'] = data['High'].rolling(window=lookback).max()
+        data['RollingLow'] = data['Low'].rolling(window=lookback).min()
+
+        # Initialize signal columns
+        data['LongSignal'] = np.nan
+        data['ShortSignal'] = np.nan
+
+        # Counters for trades
+        long_entries = 0
+        short_entries = 0
+
+        print_me = "no"
+
+        # Identify breakouts
+        for i in range(lookback, len(data)):
+            window = data.iloc[i-lookback:i]
+            highest_high = window['High'].max()
+            lowest_low = window['Low'].min()
+            today_close = data.iloc[i]['Close']
+            today_date = data.index[i]
+
+            if print_me == "yes":
+             # Print the values for inspection
+                print(f"Index: {data.index[i]}")
+                print("Today Close:", today_close)
+                print("Highest High of previous 20 days:", highest_high)
+                print("Lowest Low of previous 20 days:", lowest_low)
+                print("-------")
+
+            # Check for a long breakout
+            if today_close > highest_high:
+                long_entries += 1
+                data.iloc[i, data.columns.get_loc('LongSignal')] = today_close
+                print(f"Long signal triggered on {today_date} at price {today_close}")
+
+            # Check for a short breakout
+            if today_close < lowest_low:
+                short_entries += 1
+                data.iloc[i, data.columns.get_loc('ShortSignal')] = today_close
+                print(f"Short signal triggered on {today_date} at price {today_close}")
+
+        total_trades = long_entries + short_entries
+
+        print("Number of long breakouts:", long_entries)
+        print("Number of short breakouts:", short_entries)
+        print("Total Turtle Trades:", total_trades)
+
+        # Plotting
+        plt.figure(figsize=(12, 6))
+        plt.plot(data.index, data['Close'], label='Close Price', color='blue')
+        plt.plot(data.index, data['MA'], label=f'{lookback}-Day Moving Average', color='orange', linewidth=2)
+
+        # Plot the rolling highest high line
+        plt.plot(data.index, data['RollingHigh'], label=f'{lookback}-Day Rolling High', color='purple', linestyle='--')
+        plt.plot(data.index, data['RollingLow'], label=f'{lookback}-Day Rolling Low', color='purple', linestyle='--')
+
+
+        # Plot long signals as green upward triangles
+        plt.scatter(data.index, data['LongSignal'], marker='^', color='green', s=100, label='Long Entry', zorder=5)
+
+        # Plot short signals as red downward triangles
+        plt.scatter(data.index, data['ShortSignal'], marker='v', color='red', s=100, label='Short Entry', zorder=5)
+
+        plt.title(f'{ticker} Price with Turtle Signals and {lookback}-Day MA')
+        plt.xlabel('Date')
+        plt.ylabel('Price')
+        plt.legend()
+        plt.grid(True)
+        
+        pdf.savefig()  # Saves the current figure to the PDF
+        plt.close()    # Close the current figure to avoid overlap
