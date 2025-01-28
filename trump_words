@@ -1,0 +1,230 @@
+import requests
+from bs4 import BeautifulSoup
+from datetime import datetime
+import os
+
+today_date = datetime.now().strftime("%Y-%m-%d")
+
+def fetch_new_post_urls(base_url):
+    try:
+        response = requests.get(base_url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Find all post URLs on the page (adjust selector based on structure)
+        links = soup.find_all('a', href=True)
+        post_urls = [link['href'] for link in links if '/remarks/' in link['href']]
+
+        # Ensure full URLs
+        post_urls = [url if url.startswith('http') else base_url.rstrip('/') + url for url in post_urls]
+
+        return post_urls
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching base URL: {e}")
+        return []
+
+def load_scraped_urls(scraped_urls_file):
+    if os.path.exists(scraped_urls_file):
+        with open(scraped_urls_file, 'r', encoding='utf-8') as file:
+            return set(line.strip() for line in file)
+    return set()
+
+def save_scraped_url(scraped_urls_file, url):
+    with open(scraped_urls_file, 'a', encoding='utf-8') as file:
+        file.write(url + '\n')
+
+def scrape_and_save_posts(post_urls, scraped_urls_file):
+    # Generate file name with today's date
+
+    filename = f"trump_transcript_{today_date}.txt"
+
+    scraped_urls = load_scraped_urls(scraped_urls_file)
+
+    with open(filename, 'a', encoding='utf-8') as file:
+        for url in post_urls:
+            if url in scraped_urls:
+                print(f"Skipping already scraped URL: {url}")
+                continue
+
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                soup = BeautifulSoup(response.content, 'html.parser')
+
+                # Extract readable text content (adjust selector as needed)
+                text = soup.get_text(separator='\n', strip=True)
+
+                # Write the text to the file
+                file.write(f"URL: {url}\n")
+                file.write(text)
+                file.write("\n\n---\n\n")
+
+                # Save the URL to the scraped list
+                save_scraped_url(scraped_urls_file, url)
+
+                print(f"Content from {url} saved successfully.")
+
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching {url}: {e}")
+            except Exception as e:
+                print(f"Unexpected error processing {url}: {e}")
+
+# Example usage
+base_url = "https://www.whitehouse.gov/remarks/"
+scraped_urls_file = "scraped_urls.txt"
+post_urls = fetch_new_post_urls(base_url)
+scrape_and_save_posts(post_urls, scraped_urls_file)
+
+from collections import Counter
+import matplotlib.pyplot as plt
+import re
+from datetime import datetime
+from wordcloud import WordCloud, STOPWORDS
+
+# Full list of countries (ISO recognized)
+COUNTRIES = [
+    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
+    "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana",
+    "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad",
+    "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Denmark", "Djibouti", "Dominica",
+    "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland",
+    "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti",
+    "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Ivory Coast", "Jamaica", "Japan",
+    "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Korea", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya",
+    "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania",
+    "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru",
+    "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Panama",
+    "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis",
+    "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles",
+    "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain",
+    "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga",
+    "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom",
+    "United States", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"
+]
+
+def load_transcript(file_pattern="trump_transcript_*.txt"):
+    today_date = datetime.now().strftime("%Y-%m-%d")
+    filename = file_pattern.replace("*", today_date)
+    
+    try:
+        with open(filename, 'r', encoding='utf-8') as file:
+            return file.read()
+    except FileNotFoundError:
+        print(f"File '{filename}' not found. Make sure the transcript exists.")
+        return ""
+
+def count_country_mentions(text, country_list):
+    # Create a counter to store occurrences of each country
+    country_counter = Counter()
+    
+    # Normalize the text to lowercase and remove special characters
+    normalized_text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
+    
+    for country in country_list:
+        # Count occurrences of each country name
+        count = normalized_text.count(country.lower())
+        if count > 0:
+            country_counter[country] += count
+    
+    return country_counter
+
+def count_special_words(text, special_words):
+    # Create a counter for the special words
+    word_counter = Counter()
+
+    # Normalize the text to lowercase and remove special characters
+    normalized_text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
+
+    for word in special_words:
+        # Count occurrences of each special word
+        count = normalized_text.count(word.lower())
+        if count > 0:
+            word_counter[word] += count
+
+    return word_counter
+
+def plot_top_countries(country_counter, top_n=10):
+    # Get the top N countries by count
+    most_common = country_counter.most_common(top_n)
+    
+    if not most_common:
+        print("No country mentions found.")
+        return
+    
+    countries, counts = zip(*most_common)  # Separate keys and values
+    
+    # Plot the bar chart
+    plt.figure(figsize=(12, 7))
+    plt.bar(countries, counts, color='skyblue')
+    plt.title(f"Top {top_n} Most Mentioned Countries in Transcript", fontsize=16)
+    plt.xlabel("Country", fontsize=14)
+    plt.ylabel("Mentions", fontsize=14)
+    plt.xticks(rotation=45, fontsize=12)
+    plt.tight_layout()
+    plt.show()
+
+def plot_top_words(word_counter, top_n=10):
+    # Get the top N words by count
+    most_common = word_counter.most_common(top_n)
+
+    if not most_common:
+        print("No special words found.")
+        return
+
+    words, counts = zip(*most_common)  # Separate keys and values
+
+    # Plot the bar chart
+    plt.figure(figsize=(12, 7))
+    plt.bar(words, counts, color='orange')
+    plt.title(f"Top {top_n} Special Words in Transcript", fontsize=16)
+    plt.xlabel("Word", fontsize=14)
+    plt.ylabel("Mentions", fontsize=14)
+    plt.xticks(rotation=45, fontsize=12)
+    plt.tight_layout()
+    plt.show()
+
+def generate_word_cloud(text):
+    # Normalize the text to lowercase
+    normalized_text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
+
+    # Use WordCloud's built-in stopwords
+    stopwords = STOPWORDS
+
+    wordcloud = WordCloud(
+        width=800, height=400, background_color="white", stopwords=stopwords
+    ).generate(normalized_text)
+
+    # Display the word cloud
+    plt.figure(figsize=(12, 6))
+    plt.imshow(wordcloud, interpolation="bilinear")
+    plt.axis("off")
+    plt.title("Word Cloud from Transcript", fontsize=16)
+    plt.show()
+
+# Example usage
+if __name__ == "__main__":
+    # Load transcript
+    transcript = load_transcript()
+
+    if transcript:
+        # Count mentions of countries
+        country_mentions = count_country_mentions(transcript, COUNTRIES)
+        
+        # Plot the top 10 countries
+        plot_top_countries(country_mentions)
+
+        # Define a list of special words
+        special_words = ["freedom", "democracy", "security",
+                         "economy", "unity", "growth", "health",
+                         "justice", "power", "peace","immigrant","immigration",
+                        "criminals","inflation","energy","tariffs","taxes","regulations"]
+
+        # Count mentions of special words
+        special_word_mentions = count_special_words(transcript, special_words)
+
+        # Plot the top 10 special words
+        plot_top_words(special_word_mentions)
+
+        # Generate a word cloud
+        generate_word_cloud(transcript)
